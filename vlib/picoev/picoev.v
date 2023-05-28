@@ -7,7 +7,14 @@ import net
 import picohttpparser
 
 #include <errno.h>
+$if windows {
+#include <winapi/winsock2.h>
+#include <winapi/ws2tcpip.h>
+#include <windows.h>
+}
+$else {
 #include <netinet/tcp.h>
+}
 #include <signal.h>
 #flag -I @VEXEROOT/thirdparty/picoev
 #flag @VEXEROOT/thirdparty/picoev/picoev.o
@@ -78,12 +85,24 @@ mut:
 
 [inline]
 fn setup_sock(fd int) ! {
-	flag := 1
-	if C.setsockopt(fd, C.IPPROTO_TCP, C.TCP_NODELAY, &flag, sizeof(int)) < 0 {
-		return error('setup_sock.setup_sock failed')
+	$if windows {
+		flag := 1
+		if C.setsockopt(fd, C.IPPROTO_TCP, C.TCP_NODELAY, &flag, sizeof(int)) < 0 {
+			return error('setup_sock.setup_sock failed')
+		}
+		nonblocking := u32(1)
+		if C.ioctlsocket(fd, C.FIONBIO, &nonblocking) != 0 {
+			return error('ioctlsocket failed')
+		}
 	}
-	if C.fcntl(fd, C.F_SETFL, C.O_NONBLOCK) != 0 {
-		return error('fcntl failed')
+	$else {
+		flag := 1
+		if C.setsockopt(fd, C.IPPROTO_TCP, C.TCP_NODELAY, &flag, sizeof(int)) < 0 {
+			return error('setup_sock.setup_sock failed')
+		}
+		if C.fcntl(fd, C.F_SETFL, C.O_NONBLOCK) != 0 {
+			return error('fcntl failed')
+		}
 	}
 }
 
@@ -138,18 +157,34 @@ fn rw_callback(loop &C.picoev_loop, fd int, events int, context voidptr) {
 				close_conn(loop, fd)
 				return
 			} else if r == -1 {
-				// error
-				if C.errno == C.EAGAIN {
-					// try again later
+				$if windows {
+					// error
+					if C.errno == C.EAGAIN {
+						// try again later
+						return
+					}
+					if C.errno == C.WSAEWOULDBLOCK {
+						// try again later
+						return
+					}
+					// fatal error
+					close_conn(loop, fd)
 					return
 				}
-				if C.errno == C.EWOULDBLOCK {
-					// try again later
+				$else {
+					// error
+					if C.errno == C.EAGAIN {
+						// try again later
+						return
+					}
+					if C.errno == C.EWOULDBLOCK {
+						// try again later
+						return
+					}
+					// fatal error
+					close_conn(loop, fd)
 					return
 				}
-				// fatal error
-				close_conn(loop, fd)
-				return
 			}
 			p.idx[fd] += r
 
@@ -224,7 +259,7 @@ pub fn new(config Config) &Picoev {
 		config.err_cb(config.user_data, picohttpparser.Request{}, mut &picohttpparser.Response{},
 			err)
 	}
-
+	
 	C.picoev_init(picoev.max_fds)
 	loop := C.picoev_create_loop(picoev.max_timeout)
 	mut pv := &Picoev{
@@ -253,6 +288,11 @@ pub fn (p Picoev) serve() {
 fn update_date(mut p Picoev) {
 	for {
 		p.date = &u8(C.get_date())
-		C.usleep(1000000)
+		$if windows {
+			C.Sleep(1000000)
+		}
+		$else {
+			C.usleep(1000000)
+		}
 	}
 }
