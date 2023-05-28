@@ -8,12 +8,11 @@ import picohttpparser
 
 #include <errno.h>
 $if windows {
-#include <winapi/winsock2.h>
-#include <winapi/ws2tcpip.h>
-#include <windows.h>
-}
-$else {
-#include <netinet/tcp.h>
+	#include <winapi/winsock2.h>
+	#include <winapi/ws2tcpip.h>
+	#include <windows.h>
+} $else {
+	#include <netinet/tcp.h>
 }
 #include <signal.h>
 #flag -I @VEXEROOT/thirdparty/picoev
@@ -94,8 +93,7 @@ fn setup_sock(fd int) ! {
 		if C.ioctlsocket(fd, C.FIONBIO, &nonblocking) != 0 {
 			return error('ioctlsocket failed')
 		}
-	}
-	$else {
+	} $else {
 		flag := 1
 		if C.setsockopt(fd, C.IPPROTO_TCP, C.TCP_NODELAY, &flag, sizeof(int)) < 0 {
 			return error('setup_sock.setup_sock failed')
@@ -170,8 +168,7 @@ fn rw_callback(loop &C.picoev_loop, fd int, events int, context voidptr) {
 					// fatal error
 					close_conn(loop, fd)
 					return
-				}
-				$else {
+				} $else {
 					// error
 					if C.errno == C.EAGAIN {
 						// try again later
@@ -259,7 +256,7 @@ pub fn new(config Config) &Picoev {
 		config.err_cb(config.user_data, picohttpparser.Request{}, mut &picohttpparser.Response{},
 			err)
 	}
-	
+
 	C.picoev_init(picoev.max_fds)
 	loop := C.picoev_create_loop(picoev.max_timeout)
 	mut pv := &Picoev{
@@ -289,9 +286,8 @@ fn update_date(mut p Picoev) {
 	for {
 		p.date = &u8(C.get_date())
 		$if windows {
-			C.Sleep(1000000)
-		}
-		$else {
+			C.sleep(1000000)
+		} $else {
 			C.usleep(1000000)
 		}
 	}
