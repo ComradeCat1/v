@@ -280,7 +280,7 @@ fn get_backend(arch pref.Arch) !CodeGen {
 					g: 0
 				}
 			} $else {
-				eprintln('-native only have amd64 and arm64 codegens')
+				eprintln('-native only has amd64 and arm64 codegens')
 				exit(1)
 			}
 		}
